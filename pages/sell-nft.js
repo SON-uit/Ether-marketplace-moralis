@@ -1,6 +1,6 @@
 import styles from "../styles/Home.module.css"
 import { Form, useNotification, Button } from "web3uikit"
-import { useMoralis, useWeb3Contract } from "react-moralis"
+import { useMoralis, useWeb3Contract, useMoralisWeb3Api } from "react-moralis"
 import { ethers } from "ethers"
 import nftAbi from "../constants/BasicNft.json"
 import nftMarketplaceAbi from "../constants/NftMarketplace.json"
@@ -9,6 +9,29 @@ import { useEffect, useState } from "react"
 
 export default function Home() {
     const { chainId, account, isWeb3Enabled } = useMoralis()
+    console.log(account)
+    const { account: fetchAccount } = useMoralisWeb3Api()
+    const [nftOfUser, setNftofUser] = useState(null)
+    const { Moralis, isInitialized, isInitializing } = useMoralis()
+    const fetchNft = async () => {
+        const data = await fetchAccount.getNFTs({
+            chain: chainId,
+        })
+        const nftDetails = data.result.map((items) => {
+            return {
+                token_address: items.token_address,
+                token_id: items.token_id,
+                metadata: JSON.parse(items.metadata),
+                price: 0.001,
+            }
+        })
+        setNftofUser(nftDetails)
+    }
+    useEffect(() => {
+        if (isInitialized) {
+            fetchNft()
+        }
+    }, [isInitialized])
     const chainString = chainId ? parseInt(chainId).toString() : "31337"
     const marketplaceAddress = networkMapping[chainString].NftMarketplace[0]
     const dispatch = useNotification()
@@ -16,12 +39,39 @@ export default function Home() {
 
     const { runContractFunction } = useWeb3Contract()
 
+    //handler cancel Itesm
+    // async function handleCancel() {
+    //     console.log("Start cancel")
+    //     const cancelOptions = {
+    //         abi: nftMarketplaceAbi,
+    //         contractAddress: marketplaceAddress,
+    //         functionName: "cancelListing",
+    //         params: {
+    //             nftAddress: "0xbc3e653c145bb9359d3a7718326ddfb2a87c022c",
+    //             tokenId: "1",
+    //         },
+    //     }
+    //     console.log(cancelOptions)
+    //     await runContractFunction({
+    //         params: cancelOptions,
+    //         onSuccess: (data) => {
+    //             console.log(data)
+    //         },
+    //         onError: (error) => {
+    //             console.log("error")
+    //             console.log(error.message)
+    //         },
+    //     })
+    // }
+    // useEffect(() => {
+    //     handleCancel()
+    // }, [])
     async function approveAndList(data) {
         console.log("Approving...")
         const nftAddress = data.data[0].inputResult
         const tokenId = data.data[1].inputResult
         const price = ethers.utils.parseUnits(data.data[2].inputResult, "ether").toString()
-
+        console.log(nftAddress, tokenId, price)
         const approveOptions = {
             abi: nftAbi,
             contractAddress: nftAddress,
@@ -31,11 +81,12 @@ export default function Home() {
                 tokenId: tokenId,
             },
         }
-
+        console.log(approveOptions)
         await runContractFunction({
             params: approveOptions,
             onSuccess: () => handleApproveSuccess(nftAddress, tokenId, price),
             onError: (error) => {
+                console.log("herror")
                 console.log(error)
             },
         })
@@ -53,11 +104,14 @@ export default function Home() {
                 price: price,
             },
         }
-
+        console.log(listOptions)
         await runContractFunction({
             params: listOptions,
             onSuccess: handleListSuccess,
-            onError: (error) => console.log(error),
+            onError: (error) => {
+                console.log("error")
+                console.log(error.message)
+            },
         })
     }
 
@@ -98,7 +152,7 @@ export default function Home() {
     }
 
     useEffect(() => {
-        if(isWeb3Enabled){
+        if (isWeb3Enabled) {
             setupUI()
         }
     }, [proceeds, account, isWeb3Enabled, chainId])
@@ -131,6 +185,33 @@ export default function Home() {
                 title="Sell your NFT!"
                 id="Main Form"
             />
+            <div className="grid grid-cols-2 gap-4">
+                {nftOfUser &&
+                    nftOfUser.map((nft, index) => (
+                        <div key={index} className="flex flex-col">
+                            <img
+                                src={nft.metadata.image.replace(
+                                    "ipfs://",
+                                    "https://ipfs.io/ipfs/"
+                                )}
+                            />
+                            <form>
+                                <h4>Token Adress:</h4>
+                                <input type="text" value={nft.token_address} />
+                                <h4>Token Id:</h4>
+                                <input type="text" value={nft.token_id} />
+                                <h4>Price</h4>
+                                <input type="text" value={nft.price} />
+                                <button
+                                    type="submit"
+                                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full"
+                                >
+                                    List
+                                </button>
+                            </form>
+                        </div>
+                    ))}
+            </div>
             <div>Withdraw {proceeds} proceeds</div>
             {proceeds != "0" ? (
                 <Button
